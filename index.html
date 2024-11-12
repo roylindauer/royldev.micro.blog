@@ -1,0 +1,2069 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+	<meta name="generator" content="Hugo 0.91.2" />
+
+  <title>
+      
+      ROYL DEV BLOG
+      
+  </title>
+
+</head>
+
+
+  <body>
+
+    
+
+	
+<div class="h-feed">
+
+	
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/11/12/running-a-docker.html">Running a docker registry in my homelab</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/11/12/running-a-docker.html" class="u-url"><time class="dt-published" datetime="2024-11-12 12:17:35 -0800">Nov 12, 2024</time></a>
+
+		<div class="e-content">
+			 <p>What I wanted is to have a docker image registry available in my home network for testing and developing websites and applications. I do not want or need access to the registry outside of my home network.</p>
+<p>Here is what I learned and how I did it.</p>
+<p>Step 0 - Create a VM to be the home for my registry. There are a lot of ways to do this. I use Proxmox on a Dell PowerEdge server, so that is where I will create my VM and install Ubuntu.</p>
+<p>Step 1 - Install Docker</p>
+<p>The Docker website has instructions for installing on various operating systems with different package managers. I am using their instructions for Ubuntu.</p>
+<p>First remove any default installs, add the docker repository, then install. ie:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#66d9ef">for</span> pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; <span style="color:#66d9ef">do</span> sudo apt-get remove $pkg; <span style="color:#66d9ef">done</span>
+
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m <span style="color:#ae81ff">0755</span> -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  <span style="color:#e6db74">&#34;deb [arch=</span><span style="color:#66d9ef">$(</span>dpkg --print-architecture<span style="color:#66d9ef">)</span><span style="color:#e6db74"> signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+</span><span style="color:#e6db74">  </span><span style="color:#66d9ef">$(</span>. /etc/os-release <span style="color:#f92672">&amp;&amp;</span> echo <span style="color:#e6db74">&#34;</span>$VERSION_CODENAME<span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">)</span><span style="color:#e6db74"> stable&#34;</span> | <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>  sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+</code></pre></div><p>Step 2 - Figure out if you want to secure the registry, or not.</p>
+<p>This is where I have had the most trouble.</p>
+<p>The options as I saw them.</p>
+<p><strong>Do not secure the registry.</strong></p>
+<p>Configure each docker installation that would interact with the registry to use an insecure registry. This works, mostly. What I was running into was that some applications that build docker images that use buildkit would fail to push the image to the registry. This requires customizing buildkit, but I simply could not get this working with Kamal. Going this route requires me to fiddle with may too many knobs. It&rsquo;s more brittle this way</p>
+<p><strong>Secure the registry with a self signed certificate.</strong></p>
+<p>Doable, but annoying. Again, so many knobs and dials to fiddle with. You are now managing the certificates, and distributing to the different machines that need them.</p>
+<p><strong>Secure the registry with certficates from letsencrypt.</strong></p>
+<p>The option I ultimately ended up going with.</p>
+<p>This path has the least amount of friction. None of my VMs are exposed to the Internet so I went with DNS validation for generating the certs. I did loosen up the permissions for the cert directories so I could mount them in the registry container with less hassle. I probably could run an NGinx proxy on the server and route requests to the registry container and avoid the permissions issue. The trade off I guess is finding which knobs and dials you care to tweak.</p>
+<p>I am containing this in a project directory called <code>docker-registry</code></p>
+<p>It consists of a docker-compose.yml, a symlink to the letsencrypt certs, and a directory to store the data.</p>
+<p>After I generated certs, symlinked the certs directory in my registry project.</p>
+<pre tabindex="0"><code>sudo certbot certonly --manual --preferred-challenges dns-01 -d registry.lindauerlab.net 
+</code></pre><pre tabindex="0"><code>sudo ln -s /etc/letsencrypt/live/registry.lindauerlab.net certs
+</code></pre><p><strong>docker-compose.yml</strong></p>
+<pre tabindex="0"><code>services:
+  registry:
+    image: registry:2
+    ports:
+    - &quot;5000:5000&quot;
+    environment:
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /data
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/fullchain1.pem
+      REGISTRY_HTTP_TLS_KEY: /certs/privkey1.pem
+      # REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
+      # REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      # REGISTRY_AUTH: htpasswd
+    volumes:
+      - ./data:/data
+      - ./auth:/auth
+      - ./certs/:/certs
+</code></pre>
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/06/04/form-objects-in.html">Form Objects in Ruby on Rails</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/06/04/form-objects-in.html" class="u-url"><time class="dt-published" datetime="2024-06-04 10:32:28 -0800">Jun 4, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<p>In Ruby on Rails, a Form Object is a design pattern used to handle the complexity of forms that don&rsquo;t map directly to a single model or have unique/complex validation and business logic. It encapsulates the logic related to form processing, validation, and data persistence, often combining attributes from multiple models or handling data that doesn&rsquo;t fit neatly into the traditional ActiveRecord model structure.</p>
+<p>Consider a UsersController that lets you create or edit a user. Typical CRUD. The form to create and edit a User may require a username or email, password, a full name. But then now consider an InvitationsController, which will also create a User, but this form may only require an email address. Our model validations for User will become a little gross with conditional validations, potentially virtual attributes to act as flags for model callbacks. Enter the Form Object.</p>
+<p>A Form Object is a new class that sits between the Controller and the Model.</p>
+<h2 id="key-characteristics-of-a-form-object-in-rails">Key Characteristics of a Form Object in Rails:</h2>
+<ul>
+<li><!-- raw HTML omitted -->Encapsulation of Form Logic:<!-- raw HTML omitted --> Form objects centralize the form-related logic, keeping controllers and models cleaner by moving validation and other form-specific methods into a dedicated class.</li>
+<li><!-- raw HTML omitted -->Composite Forms:<!-- raw HTML omitted --> They are useful when a form interacts with multiple models. For example, a user registration form might need to create both a User and a Profile model.</li>
+<li><!-- raw HTML omitted -->Custom Validations:<!-- raw HTML omitted --> Form objects can have their own validations independent of the underlying models. This allows for more granular control over the validation process.</li>
+<li><!-- raw HTML omitted -->Data Persistence:<!-- raw HTML omitted --> While form objects can validate and manipulate data, they usually delegate the actual persistence of data to the relevant models.</li>
+<li><!-- raw HTML omitted -->Reusable Logic:<!-- raw HTML omitted --> By centralizing form logic, form objects can be reused across different parts of the application, making the codebase more maintainable and DRY (Don&rsquo;t Repeat Yourself).</li>
+</ul>
+<p>Active Model provides features to implement input filtering and validation. We can lean on Active Model to craft our Form Object, called <code>ApplicationForm</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">ApplicationForm</span>
+  <span style="color:#66d9ef">include</span> <span style="color:#66d9ef">ActiveModel</span><span style="color:#f92672">::</span><span style="color:#66d9ef">API</span>
+  <span style="color:#66d9ef">include</span> <span style="color:#66d9ef">ActiveModel</span><span style="color:#f92672">::</span><span style="color:#66d9ef">Attributes</span>
+
+  <span style="color:#66d9ef">class</span> <span style="color:#f92672">&lt;&lt;</span> self
+
+    <span style="color:#75715e"># This method is used in the controller to create a new instance of the form</span>
+    <span style="color:#75715e"># and populate it with the params from the request.</span>
+    <span style="color:#75715e"># Usage: Lead::LeadGenForm.from(params.require(:lead_lead_gen_form))</span>
+    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">from</span>(params)
+      <span style="color:#66d9ef">new</span>(params<span style="color:#f92672">.</span>permit(attribute_names<span style="color:#f92672">.</span>map(<span style="color:#f92672">&amp;</span><span style="color:#e6db74">:to_sym</span>)))
+    <span style="color:#66d9ef">end</span>
+  <span style="color:#66d9ef">end</span>
+
+  <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">save</span>
+    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">false</span> <span style="color:#66d9ef">unless</span> valid?
+
+    with_transaction <span style="color:#66d9ef">do</span>
+      submit!
+    <span style="color:#66d9ef">end</span>
+  <span style="color:#66d9ef">end</span>
+
+  <span style="color:#66d9ef">private</span>
+
+  <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">with_transaction</span>(<span style="color:#f92672">&amp;</span>)
+    <span style="color:#66d9ef">ApplicationRecord</span><span style="color:#f92672">.</span>transaction(<span style="color:#f92672">&amp;</span>)
+  <span style="color:#66d9ef">end</span>
+
+  <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">submit!</span>
+    <span style="color:#66d9ef">raise</span> <span style="color:#66d9ef">NotImplementedError</span>
+  <span style="color:#66d9ef">end</span>
+<span style="color:#66d9ef">end</span>
+
+</code></pre></div><p>We include a couple of ActiveModel concerns.</p>
+<p><!-- raw HTML omitted -->ActiveModel::API<!-- raw HTML omitted --> automatically gives us validation support! From the docs:</p>
+<blockquote>
+<p>Includes the required interface for an object to interact with Action Pack and Action View, using different Active Model modules. It includes model name introspections, conversions, translations, and validations. Besides that, it allows you to initialize the object with a hash of attributes, pretty much like Active Record does.</p>
+</blockquote>
+<p>Super useful for us.</p>
+<p>We also include <!-- raw HTML omitted -->ActiveModel::Attributes.<!-- raw HTML omitted --> Basically, this provides a DSL for defining a form object schema and parameter types.</p>
+<blockquote>
+<p>The Attributes module allows models to define attributes beyond simple Ruby readers and writers. Similar to Active Record attributes, which are typically inferred from the database schema, Active Model Attributes are aware of data types, can have default values, and can handle casting and serialization.<!-- raw HTML omitted --><!-- raw HTML omitted -->To use Attributes, include the module in your model class and define your attributes using the attribute macro. It accepts a name, a type, a default value, and any other options supported by the attribute type.</p>
+</blockquote>
+<p>The attribute method provided by ActiveModel::Attributes is used to define our form inputs.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">Lead</span><span style="color:#f92672">::</span><span style="color:#66d9ef">LeadGenForm</span> <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">ApplicationForm</span>
+  attribute <span style="color:#e6db74">:name</span>, <span style="color:#e6db74">:string</span>
+  attribute <span style="color:#e6db74">:email</span>, <span style="color:#e6db74">:string</span>
+  attribute <span style="color:#e6db74">:message</span>, <span style="color:#e6db74">:string</span>
+
+  validates <span style="color:#e6db74">:name</span>, <span style="color:#e6db74">:email</span>, <span style="color:#e6db74">:message</span>, <span style="color:#e6db74">presence</span>: <span style="color:#66d9ef">true</span>
+  validates <span style="color:#e6db74">:email</span>, format: {<span style="color:#e6db74">with</span>: <span style="color:#66d9ef">URI</span><span style="color:#f92672">::</span><span style="color:#66d9ef">MailTo</span><span style="color:#f92672">::</span><span style="color:#66d9ef">EMAIL_REGEXP</span>}
+
+  <span style="color:#66d9ef">attr_accessor</span> <span style="color:#e6db74">:lead</span>
+
+  <span style="color:#66d9ef">private</span>
+
+  <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">submit!</span>
+    @lead <span style="color:#f92672">=</span> <span style="color:#66d9ef">Lead</span><span style="color:#f92672">.</span>new({name: name, <span style="color:#e6db74">email</span>: email, <span style="color:#e6db74">message</span>: message})
+    @lead<span style="color:#f92672">.</span>save!
+    <span style="color:#66d9ef">LeadsMailer</span><span style="color:#f92672">.</span>contact_form_auto_responder(<span style="color:#e6db74">lead</span>: lead)<span style="color:#f92672">.</span>deliver_later
+    <span style="color:#66d9ef">LeadsMailer</span><span style="color:#f92672">.</span>contact_form_notification(<span style="color:#e6db74">lead</span>: lead)<span style="color:#f92672">.</span>deliver_later
+  <span style="color:#66d9ef">end</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><p>Now in our Controller we can instantiate a new Form Object and use it in our view! Since the Form Object belongs to the presentation layer they can be used in view templates.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">create</span>
+    @lead <span style="color:#f92672">=</span> <span style="color:#66d9ef">Lead</span><span style="color:#f92672">::</span><span style="color:#66d9ef">LeadGenForm</span><span style="color:#f92672">.</span>from(params<span style="color:#f92672">.</span>require(<span style="color:#e6db74">:lead_lead_gen_form</span>))
+
+    <span style="color:#66d9ef">if</span> @lead<span style="color:#f92672">.</span>save
+      redirect_to <span style="color:#e6db74">:thank_you</span>
+    <span style="color:#66d9ef">else</span>
+      render <span style="color:#e6db74">:new</span>, <span style="color:#e6db74">status</span>: <span style="color:#e6db74">:unprocessable_entity</span>
+    <span style="color:#66d9ef">end</span>
+  <span style="color:#66d9ef">end</span>
+</code></pre></div><p>We can use the Form Object just as we would use a model in our view:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#f92672">&lt;%=</span> form_with <span style="color:#e6db74">model</span>: @lead, <span style="color:#e6db74">url</span>: lead_gen_path <span style="color:#66d9ef">do</span> <span style="color:#f92672">|</span>form<span style="color:#f92672">|</span> <span style="color:#f92672">%&gt;</span>
+</code></pre></div><p>One thing I particularly like about this pattern is that I can easily write tests for my Form Objects and do not have to juggle as many model callbacks (and deal with that complexity in tests).</p>
+<p>Using Form Objects means I can achieve cleaner, more maintainable code, especially in complex form scenarios.</p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/06/02/variable-swapping-in.html">Variable swapping in Ruby</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/06/02/variable-swapping-in.html" class="u-url"><time class="dt-published" datetime="2024-06-02 20:49:06 -0800">Jun 2, 2024</time></a>
+
+		<div class="e-content">
+			 <p>Swapping variables is a fundamental concept in programming, often encountered in algorithm development and problem-solving scenarios. While the process is straightforward in many languages, Ruby offers its own particularly elegant and concise syntax for this task. Let&rsquo;s first explore the more traditional approaches.</p>
+<p>First, you might use a temporary variable.</p>
+<pre tabindex="0"><code>a = 10
+b = 12
+puts &quot;a: #{a}, b: #{b}&quot;
+
+tmp = a 
+a = b
+b = tmp
+
+puts &quot;a: #{a}, b: #{b}&quot;
+</code></pre><p>Outputs:</p>
+<pre tabindex="0"><code>a: 10, b: 12
+a: 12, b: 10
+</code></pre><p>A more clever way to do this is with the Bitwise XOR <code>^</code> operator.</p>
+<pre tabindex="0"><code>a = 10
+b = 12
+puts &quot;a: #{a}, b: #{b}&quot;
+
+a = a ^ b
+b = a ^ b
+a = a ^ b
+
+puts &quot;a: #{a}, b: #{b}&quot;
+</code></pre><p>outputs:</p>
+<pre tabindex="0"><code>a: 10, b: 12
+a: 12, b: 10
+</code></pre><p>Weird, and looks like magic. Why would calling the same operation 3 times work? The <!-- raw HTML omitted -->^<!-- raw HTML omitted --> operator is a method on <!-- raw HTML omitted -->Integer<!-- raw HTML omitted -->, <!-- raw HTML omitted -->TrueClass<!-- raw HTML omitted -->, <!-- raw HTML omitted -->FalseClass<!-- raw HTML omitted -->, and <!-- raw HTML omitted -->NilClass<!-- raw HTML omitted --> that performs XOR.</p>
+<p>The trick here is that XOR <em>does not lose information</em>.</p>
+<p>The way I understand it is it basically does something like:</p>
+<pre tabindex="0"><code>a = 1
+b = 2
+puts &quot;a: #{a}, b: #{b}&quot;
+
+a = a + b # 1 + 2 = 3, a = 3
+b = a - b # 3 - 2 = 1, b = 1
+a = a - b # 3 - 1 = 2, a = 2
+
+puts &quot;a: #{a}, b: #{b}&quot;
+</code></pre><h2 id="the-ruby-way">The Ruby Way</h2>
+<p>The Ruby way to do this is actually super elegant! Using <!-- raw HTML omitted -->multiple assignment<!-- raw HTML omitted --> we can just swap the variables.</p>
+<pre tabindex="0"><code>a = 1
+b = 2
+puts &quot;a: #{a}, b: #{b}&quot; # a: 1, b: 2
+
+# Swapping variables using multiple assignment
+a, b = b, a
+puts &quot;a: #{a}, b: #{b}&quot; # a: 2, b: 1
+</code></pre><h2 id="strings">Strings</h2>
+<p>What about strings? You cannot subtract a string in Ruby.</p>
+<pre tabindex="0"><code>&quot;string&quot; ^ &quot;another string&quot;
+undefined method `^' for &quot;string&quot;:String (NoMethodError)
+</code></pre><p>Could do something like concatenate and substring but that just seems like it&rsquo;s missing the point. Maybe use a temporary variable for strings.</p>
+<pre tabindex="0"><code>a = &quot;first&quot;
+b = &quot;second&quot;
+puts &quot;a: #{a}, b: #{b}&quot; # a: first, b: second
+
+a = a + b # firstsecond
+b = a[0..((a.length - b.length)-1)] # first
+a = a[b.length..a.length] # second 
+
+puts &quot;a: #{a}, b: #{b}&quot; # a: second, b: first
+</code></pre><p>Ruby being awesome though, really just use multiple assignment :D</p>
+<h2 id="update">Update</h2>
+<p>Okay I am more clear on how XOR actually works.</p>
+<p>&gt; XOR is a binary operation, it stands for &ldquo;exclusive or&rdquo;, that is to say the resulting bit evaluates to one if only exactly one of the bits is set.</p>
+<p>a = a ^ b means, if a is 0 or b is 0, return 0. If a is 1 OR b is 1, return 1, if a is 1 and b is 1, return 0. Using our example values of a = 10 and b = 12, and we convert to binary: a = 1010, and b = 1100.</p>
+<p>The math looks like:</p>
+<pre tabindex="0"><code>a = a ^ b # 1010 ^ 1100 = 0110 (converted to decimal: 10 ^ 12 = 6)
+b = a ^ b # 0110 ^ 1100 = 1010 (6 ^ 12 = 10)
+a = a ^ b # 0110 ^ 1010 = 1100 (6 ^ 10 = 12)
+</code></pre><p>Or, a is now 12, and b is now 10.</p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/06/02/quirky-ruby-feature.html">Quirky Ruby Feature - Mixing Code and Data</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/06/02/quirky-ruby-feature.html" class="u-url"><time class="dt-published" datetime="2024-06-02 00:30:05 -0800">Jun 2, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p><strong>END</strong>
+this a line
+this another line
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/04/15/how-to-change.html">How to change a Users Password via Tinker in Laravel</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/04/15/how-to-change.html" class="u-url"><time class="dt-published" datetime="2024-04-15 16:27:18 -0800">Apr 15, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/04/14/a-docker-based.html">A docker based setup for testing with Laravel</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/04/14/a-docker-based.html" class="u-url"><time class="dt-published" datetime="2024-04-14 20:15:32 -0800">Apr 14, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/04/14/add-taggable-support.html">Add taggable support to my personal blog</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/04/14/add-taggable-support.html" class="u-url"><time class="dt-published" datetime="2024-04-14 19:59:41 -0800">Apr 14, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<pre><code>def process(element)
+  return if element[:tags].nil?
+  return unless element.tag_list.empty?
+
+  element.tag_list = element[:tags]
+  element.save
+end
+</code></pre>
+<p>end
+end
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<pre><code>  let(:blog) { create(:blog) }
+
+  let(:element) {
+    blog[:tags] = %w[tag1 tag2]
+    blog
+  }
+
+  it &quot;updates the tag list&quot; do
+    process
+    expect(element.reload.tag_list).to eq(%w[tag1 tag2])
+  end
+
+  context &quot;when the old tags field is nil&quot; do
+    let(:element) {
+      blog[:tags] = nil
+      blog
+    }
+
+    it &quot;does not update the tags&quot; do
+      process
+      expect(element.reload.tag_list).to eq([])
+    end
+  end
+
+  context &quot;when the blog post already has a tag list&quot; do
+    let(:element) {
+      blog[:tags] = %w[tag1 tag2]
+      create(:blog_with_tags, tag_list: %w[tag3 tag4])
+    }
+
+    it &quot;does not update the record&quot; do
+      process
+      expect(element.reload.updated_at).to eq(element.updated_at)
+      expect(element.reload.tag_list).to eq(%w[tag3 tag4])
+    end
+  end
+end
+</code></pre>
+<p>end
+end
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>Finished in 2.52 seconds (files took 1.48 seconds to load)
+92 examples, 0 failures, 8 pending
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/04/13/trying-to-dispatch.html">Trying to Dispatch Jobs via Tinker with Laravel and SQLite</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/04/13/trying-to-dispatch.html" class="u-url"><time class="dt-published" datetime="2024-04-13 21:01:14 -0800">Apr 13, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<p>$recipe = Recipe::find(5);</p>
+<p>[!] Aliasing &lsquo;Recipe&rsquo; to &lsquo;App\Models\Recipe&rsquo; for this Tinker session.</p>
+<p>Illuminate\Database\QueryException  SQLSTATE[HY000]: General error: 10 disk I/O error (Connection: sqlite, SQL: select * from &ldquo;recipes&rdquo; where &ldquo;recipes&rdquo;.&ldquo;id&rdquo; = 17 limit 1).<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>Illuminate\Database\QueryException  SQLSTATE[HY000]: General error: 10 disk I/O error (Connection: sqlite, SQL: select * from &ldquo;users&rdquo;).</p>
+<p>&gt;<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/04/01/use-ansible-to.html">Use Ansible to Configure your Workstation</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/04/01/use-ansible-to.html" class="u-url"><time class="dt-published" datetime="2024-04-01 19:52:22 -0800">Apr 1, 2024</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<p>vars_files:
+- vars/main.yml</p>
+<p>roles:
+- geerlingguy.dotfiles
+- geerlingguy.mac.homebrew</p>
+<p>tasks: []<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>homebrew_cask_accept_external_apps: true
+homebrew_installed_packages:</p>
+<ul>
+<li>libyaml</li>
+<li>curl</li>
+<li>coreutils</li>
+<li>git</li>
+<li>git-crypt</li>
+<li>terraform</li>
+<li>wget</li>
+<li>zsh</li>
+<li>doctl</li>
+<li>go</li>
+<li>tflint</li>
+<li>asdf</li>
+<li>direnv
+homebrew_cask_appdir: /Applications
+homebrew_cask_apps:</li>
+<li>iterm2</li>
+<li>slack</li>
+<li>visual-studio-code</li>
+<li>docker</li>
+<li>postman</li>
+<li>spotify</li>
+<li>notion</li>
+<li>discord<!-- raw HTML omitted --><!-- raw HTML omitted --></li>
+</ul>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/03/10/develop-for-environment.html">Develop for Environment Specific Configuration</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/03/10/develop-for-environment.html" class="u-url"><time class="dt-published" datetime="2024-03-10 15:02:00 -0800">Mar 10, 2024</time></a>
+
+		<div class="e-content">
+			 <p>There is a pattern I see often among junior/associate developers when it comes to handling environment-specific configuration. The observed pattern could be summarized as junior developers creating separate fields for development and production environments in the application, misunderstanding the need for a single environment-aware configuration, resulting in duplicated logic to handle different keys based on the environment.</p>
+<p>An example of this in action is there will be a request to add a field in the admin area of a website to store a key for some purpose. We would typically have a dev key and a production key so depending on the environment we would use the appropriate key. The junior developer might see this and understand the request to be: &ldquo;Create two fields in the admin, one for each environment&rdquo;. After which they also add logic into the code base to check which environment the application is running and read the correct key. I was not clear at first about how to explain this, but I see now it comes down to understanding, or maybe not understanding environment-specific configuration. Understanding that we have multiple versions of the application (development and production), each with its databases, and so we just need to define the configuration once, in each version of the app.</p>
+<p>It&rsquo;s come up enough that I want to call it out, to help people on the path to thinking like a software engineer.</p>
+<p>When thinking about environment-specific configuration there are some good practices to remember:</p>
+<ul>
+<li><strong>Configuration Files:</strong> Use separate configuration files for each environment (dev, prod, etc.), allowing easy management and modification of settings.</li>
+<li><strong>Environment Variables:</strong> Leverage environment variables to store sensitive or environment-specific information, enhancing security and flexibility.</li>
+<li><strong>Single Source of Truth:</strong> Maintain a single configuration source to avoid duplication and inconsistency. Centralize configuration management for better control.</li>
+<li><strong>Parameterization:</strong> Parameterize your application to make it adaptable to different environments. Avoid hardcoding values that might change between setups.</li>
+<li><strong>Automated Deployment:</strong> Implement automated deployment processes to ensure consistency across environments, reducing the chances of configuration errors.</li>
+<li><strong>Version Control:</strong> Store configuration files in version control systems to track changes and easily roll back if needed.</li>
+<li><strong>Documentation:</strong> Document the configuration settings clearly, specifying their purpose and acceptable values. This aids understanding and future maintenance.</li>
+<li><strong>Secure Configuration:</strong> Separate sensitive information (like API keys or database passwords) from the codebase and manage them securely, possibly using vaults or secure storage solutions.</li>
+<li><strong>Testing Environments:</strong> Mimic production environments as closely as possible in testing setups to catch potential issues related to environment-specific configurations early.</li>
+<li><strong>Continuous Integration:</strong> Integrate configuration checks into your continuous integration process to identify any issues before deployment.</li>
+</ul>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2024/03/09/managing-jumpstart-pro.html">Managing Jumpstart Pro Updates</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2024/03/09/managing-jumpstart-pro.html" class="u-url"><time class="dt-published" datetime="2024-03-09 15:12:00 -0800">Mar 9, 2024</time></a>
+
+		<div class="e-content">
+			 <p><a href="https://jumpstartrails.com/">Jumpstart Pro is a Ruby on Rails SaaS template</a> that lets you quickly deliver and ship business-ready web applications. It takes care of so much boilerplate and common configuration. I&rsquo;ve been using it to build a small app for myself and love how easy it is to build production-ready applications. But it is not without some friction.</p>
+<p>As a subscriber to Jumpstart Rails you are entitled to updates. The way you get those updates is by merging in changes from upstream. As your application grows the chances of merge conflicts increase. Part of the update process is to manage those conflicts, which can be a tedious process.</p>
+<p>The things I do to smooth this process out:</p>
+<ul>
+<li>After merging changes from jumpstart/main, remove from the git index any files I for which know I do not want upstream changes</li>
+<li>Remove from the index and regenerate generated files such as yarn.lock and Gemfile.lock</li>
+<li>And the best course is to avoid making changes to core Jumpstart files where possible</li>
+</ul>
+<p>To remove a file from the git index (and not delete the file) you can run:</p>
+<pre tabindex="0"><code>git rm --cached &lt;file&gt;
+</code></pre><p>A run a script after merging (and resolving conflicts) to regenerate my generated files:</p>
+<pre tabindex="0"><code>#!/bin/bash
+
+if [[ -f yarn.lock ]]; then
+  rm yarn.lock
+fi
+
+if [[ -f Gemfile.lock ]]; then
+  rm Gemfile.lock
+fi
+
+yarn install
+bundle install
+</code></pre><p>All of this makes applying Jumpstart Pro updates easier for me and I hope it helps you as well.</p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2023/11/24/simple-database-seeder.html">Simple Database Seeder for WordPress</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2023/11/24/simple-database-seeder.html" class="u-url"><time class="dt-published" datetime="2023-11-24 15:00:00 -0800">Nov 24, 2023</time></a>
+
+		<div class="e-content">
+			 <p>I&rsquo;ve been doing some WordPress development at my day job and have come to the conclusion that the development life-cycle of WordPress is kinda bad, actually. However, there are systems &amp; processes we can implement to improve the developer and development experience. We <em>can</em> make it more enjoyable to work on WordPress!</p>
+<p>One of those systems that I sorely miss is a database seeder that can populate your site with test and dummy content. The go-to for WordPress seems to be to download a database from a live or test site. I am not a fan of this pattern at all and would rather not touch production data. If the database is large this can be a very time-consuming process. If you need media and attachments this can become a huge burden on your workstation as you download gigabytes of assets.</p>
+<p>The default method for seeding data on WordPress is to first set up a WordPress site <!-- raw HTML omitted -->somewhere<!-- raw HTML omitted -->, then create a bunch of test content, then export the content into an XML file. You can import that XML file into your local install of WordPress. However, a downside of this is that if there are attachments, they need to be publicly available either at the test site or somehow locally available. You need to have already created the content. Making updates is also tedious. I think the workflow is poor and we can do better.</p>
+<p>What I would prefer is to be more intentional about creating that content.</p>
+<p>My end goal is to be able to run a command to seed content from classes I create that very intentionally define the type of content I want available. Also, it would be nice to be able to reset the data and reseed. The command interface I want:</p>
+<pre tabindex="0"><code>$ wp-cli dbseeder seed
+$ wp-cli dbseeder truncate
+$ wp-cli dbseeder replant
+</code></pre><p>I leaned into wp-cli to help me here. I created a custom wp-cli command to wrap the business logic of seeding, truncating, and replanting the content.</p>
+<pre tabindex="0"><code>&lt;?php
+namespace RoycomCommands;
+
+use Exception;
+use HaydenPierce\ClassFinder\ClassFinder;
+use WP_CLI;
+use WP_CLI_Command;
+use RoycomTheme\DbTruncate;
+
+if (class_exists('WP_CLI_Command')) {
+    /**
+     * Class DbSeederCommand
+     */
+    class DbSeederCommand extends WP_CLI_Command
+    {
+        /**
+         * @return void
+         * @throws Exception
+         */
+        public function seed(): void
+        {
+            $classes = $this-&gt;getSeedClasses();
+            foreach ($classes as $class) {
+                WP_CLI::log(sprintf(&quot;Seeding %s...&quot;, $class));
+
+                $seed = new $class;
+                $result = $seed-&gt;run();
+
+                if ($result[&quot;success&quot;] === false) {
+                    WP_CLI::error($result[&quot;message&quot;]);
+                } else {
+                    WP_CLI::success($result[&quot;message&quot;]);
+                }
+            }
+
+            WP_CLI::success(&quot;Command executed&quot;);
+        }
+
+        /**
+         * @return void
+         */
+        public function truncate(): void
+        {
+            WP_CLI::warning(&quot;Truncating database...&quot;);
+            $DbTruncate = new DbTruncate();
+            $DbTruncate-&gt;run();
+        }
+
+        /**
+         * @return void
+         * @throws Exception
+         */
+        public function replant(): void
+        {
+            $this-&gt;truncate();
+            $this-&gt;seed();
+        }
+
+        /**
+         * @return array
+         * @throws Exception
+         */
+        private function getSeedClasses(): array
+        {
+            $class_finder = new ClassFinder();
+            $class_finder::setAppRoot(ABSPATH);
+            return $class_finder::getClassesInNamespace('RoycomTheme\\DbSeeds', ClassFinder::RECURSIVE_MODE);
+        }
+    }
+}
+</code></pre><p>I registered the command on my WordPress site.</p>
+<pre tabindex="0"><code>&lt;?php
+
+use WP_CLI;
+
+# ... the rest of functions.php...
+
+WP_CLI::add_command('dbseeder', 'RoycomCommands\\DbSeederCommand');
+</code></pre><p>I created my first seed. The class <code>AbstractSeed</code> is pretty bare bones here, it just defines an interface method called `run1 that we have to implement in our seed class.</p>
+<pre tabindex="0"><code>&lt;?php
+
+namespace RoycomTheme\DbSeeds;
+
+use RoycomTheme\AbstractDbSeed;
+
+class ExampleSeed extends AbstractDbSeed
+{
+    public function run(): array
+    {
+        $post_id = wp_insert_post([
+            'post_title' =&gt; 'Example Post',
+            'post_content' =&gt; 'This is an example post.',
+            'post_status' =&gt; 'publish',
+            'post_author' =&gt; 1,
+            'post_type' =&gt; 'post',
+        ]);
+
+        return [
+            &quot;success&quot; =&gt; true,
+            &quot;message&quot; =&gt; sprintf('Created Post with ID #%d', $post_id),
+            &quot;post_id&quot; =&gt; $post_id
+        ];
+    }
+}
+
+</code></pre><p>My composer.json file defines where to find the seeds, and where to find commands. This is a very trimmed down version of composer.json.</p>
+<pre tabindex="0"><code>{
+  &quot;require&quot;: {
+    &quot;haydenpierce/class-finder&quot;: &quot;^0.5.3&quot;
+  },
+  &quot;autoload&quot;: {
+    &quot;psr-4&quot;: {
+      &quot;Roycom\\&quot;: &quot;src/&quot;,
+      &quot;RoycomCommands\\&quot;: &quot;wp-cli/commands/&quot;,
+      &quot;RoycomTheme\\&quot;: &quot;wp-content/themes/roylart/includes/classes&quot;
+    }
+  }
+}
+</code></pre><p>The gist of what is happening is I discover seed files in the directory <code>DbSeeds</code> in my theme directory using <code>ClassFinder</code> and then for each of them I execute a <code>run</code> method. The <code>run</code> method simply runs some WordPress functions to create posts, create taxonomies, add placeholder images. Really, it can do whatever I need it to do.</p>
+<p>For example, I created a <code>PagesSeed</code> class that creates some generic pages, makes one of them the front page and one the blog page, and then also create a menu.</p>
+<p>Another seed I created is called <code>ArtworksSeed</code> for a custom post type called <code>artworks</code> that will create example posts, download images from loremflickr, and also add data to custom MetaBox fields.</p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2023/09/26/turbo-will-call.html">Turbo Will Call Stimulus `connect()` Twice</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2023/09/26/turbo-will-call.html" class="u-url"><time class="dt-published" datetime="2023-09-26 14:54:00 -0800">Sep 26, 2023</time></a>
+
+		<div class="e-content">
+			 <p>When you click a link to return to a page, or use your browsers back button to return to a page Turbo will render a cached preview of the page. It will then fetch an updated version of the page.</p>
+<p>If you have a stimulus controller on the page what will happen is the controller is initialized twice. The initial cached version will load the controller and fire off the connect() method, then the page is refreshed via Turbo, the controller is disconnected, then reconnected when the DOM is updated from the Turbo update. This will fire the connect method a second time. Super annoying.</p>
+<p>If you run into this you can detect when a Turbo preview is visible.</p>
+<pre tabindex="0"><code>if (document.documentElement.hasAttribute(&quot;data-turbo-preview&quot;)) {
+  // Turbo Drive is displaying a preview
+}
+</code></pre><p>I feel though, that this is the wrong solution and that my approach to how I am using StimulusJS controllers is inherently wrong.</p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2023/04/24/the-three-core.html">The Three Core Principles of DevOps</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2023/04/24/the-three-core.html" class="u-url"><time class="dt-published" datetime="2023-04-24 14:55:00 -0800">Apr 24, 2023</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2023/03/03/how-to-use.html">How To Use Docker Compose Effectively as a Development Tool</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2023/03/03/how-to-use.html" class="u-url"><time class="dt-published" datetime="2023-03-03 13:11:00 -0800">Mar 3, 2023</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>development:
+&laquo;: *default
+url: &ldquo;postgresql://postgres:password@127.0.0.1/docker_compose_example&rdquo;</p>
+<p>test:
+&laquo;: *default
+url: &ldquo;postgresql://postgres:password@127.0.0.1/docker_compose_example_test&rdquo;</p>
+<p>production:
+&laquo;: *default
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>volumes:
+dbdata:<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>Sidekiq.configure_client do |config|
+config.redis = { url: &lsquo;redis://localhost:6379/0&rsquo; }
+end<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>Rails.application.routes.draw do</p>
+<h1 id="define-your-application-routes-per-the-dsl-in-httpsguidesrubyonrailsorgroutinghtml">Define your application routes per the DSL in <a href="https://guides.rubyonrails.org/routing.html">https://guides.rubyonrails.org/routing.html</a></h1>
+<h1 id="defines-the-root-path-route-">Defines the root path route (&quot;/&quot;)</h1>
+<h1 id="root-articlesindex">root &ldquo;articles#index&rdquo;</h1>
+<p>mount Sidekiq::Web =&gt; &lsquo;/sidekiq&rsquo;
+end
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>redis:
+image: redis:alpine
+ports:
+- 6379:6379</p>
+<p>volumes:
+dbdata:<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>ARG RAILS_ENV=production</p>
+<p>RUN apt-get update -qq &amp;&amp; <br>
+DEBIAN_FRONTEND=noninteractive apt-get install -y &ndash;no-install-recommends  libvips libvips-dev libvips-tools libpq-dev &amp;&amp; <br>
+rm -rf /var/lib/apt/lists/* /var/cache/apt</p>
+<p>ARG BUNDLER_VERSION=2.3.26
+RUN gem install &ldquo;bundler:${BUNDLER_VERSION}&rdquo; &ndash;no-document &amp;&amp; <br>
+gem update &ndash;system &amp;&amp; <br>
+gem cleanup</p>
+<p>WORKDIR /app</p>
+<p>COPY Gemfile Gemfile.lock ./
+RUN bundle install &ndash;jobs &ldquo;$(nproc)&rdquo;</p>
+<p>COPY . .</p>
+<p>CMD [&ldquo;bin/rails&rdquo;, &ldquo;s&rdquo;, &ldquo;-b&rdquo;, &ldquo;0.0.0.0&rdquo;]</p>
+<p>EXPOSE 3000
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>development:
+&laquo;: *default
+url: &ldquo;postgresql://postgres:password@postgresql/docker_compose_example&rdquo;</p>
+<p>test:
+&laquo;: *default
+url: &ldquo;postgresql://postgres:password@postgresql/docker_compose_example_test&rdquo;</p>
+<p>production:
+&laquo;: *default<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>Sidekiq.configure_client do |config|
+config.redis = { url: &lsquo;redis://redis:6379/0&rsquo; }
+end<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2023/02/03/running-ruby-on.html">Running Ruby on Rails on Docker</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2023/02/03/running-ruby-on.html" class="u-url"><time class="dt-published" datetime="2023-02-03 13:07:00 -0800">Feb 3, 2023</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>events {
+worker_connections 1024;
+}</p>
+<p>http {
+include /etc/nginx/mime.types;
+default_type application/octet-stream;
+server_tokens off;
+client_max_body_size 10m;
+keepalive_timeout 120;
+sendfile on;
+tcp_nodelay on;
+ssl_prefer_server_ciphers on;
+ssl_session_cache shared:SSL:2m;
+gzip on;
+gzip_vary on;
+log_format main &lsquo;$remote_addr - $remote_user [$time_local] &ldquo;$request&rdquo; '
+&lsquo;$status $body_bytes_sent &ldquo;$http_referer&rdquo; '
+&lsquo;&quot;$http_user_agent&quot; &ldquo;$http_x_forwarded_for&rdquo;';</p>
+<p>access_log /var/log/nginx/access.log main;</p>
+<p>upstream app_server {
+server 127.0.0.1:3000 fail_timeout=0;
+}</p>
+<p>server {
+listen 80 default_server;
+listen [::]:80 default_server;
+root /app/public;
+add_header X-Frame-Options &ldquo;DENY&rdquo;;
+add_header X-Content-Type-Options nosniff;
+add_header Strict-Transport-Security &ldquo;max-age=31536000; includeSubDomains&rdquo; always;
+add_header X-Xss-Protection &ldquo;1; mode=block&rdquo; always;
+add_header Referrer-Policy &ldquo;origin-when-cross-origin&rdquo; always;</p>
+<pre><code>location = /favicon.ico {
+  log_not_found off;
+  access_log off;
+}
+
+location = /robots.txt {
+  allow all;
+  log_not_found off;
+  access_log off;
+}
+
+location ~ ^/(assets|packs) {
+  expires max;
+  gzip_static on;
+  log_not_found off;
+}
+
+location ~ /\.ht {
+  deny all;
+}
+
+
+location / {
+  proxy_set_header X-Forwarded-Ssl on; 
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-Server $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header Host $http_host;
+  proxy_redirect off;
+  proxy_read_timeout 300s;
+  if (!-f $request_filename) {
+    proxy_pass http://app_server;
+    break;
+  }
+}
+
+error_page 500 502 503 504 /500.html;
+location = /500.html {
+  root /app/public;
+}
+</code></pre>
+<p>}
+}
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>###############################################################################</p>
+<h1 id="heading"></h1>
+<h1 id="docker">Docker</h1>
+<h1 id="heading-1"></h1>
+<p>###############################################################################</p>
+<p>STDOUT.sync = true</p>
+<p>require &lsquo;dotenv&rsquo;
+require &lsquo;logger&rsquo;
+require &lsquo;json&rsquo;</p>
+<p>class Docker</p>
+<p>def initialize
+@config_url = false
+@pids = []
+@pid_commands = {}
+@quit = false</p>
+<pre><code>Signal.trap('QUIT') do
+  quit_all
+end
+
+Signal.trap('TERM') do
+  quit_all
+end
+</code></pre>
+<p>end</p>
+<p>def call
+logger.info &ldquo;Starting container (rails_env: #{rails_env}, deploy_env: #{deploy_env})&rdquo;</p>
+<pre><code>if ENV['ENABLE_WEB'].to_i == 1
+  start_webpack_dev_server if rails_env == 'development'
+  start_rails_s
+  start_nginx
+end
+
+if ENV['ENABLE_WORKERS'].to_i == 1
+  start_worker
+end
+
+wait_all
+</code></pre>
+<p>end</p>
+<p>private</p>
+<p>def deploy_env
+@deploy_env ||= ENV.fetch(&lsquo;DEPLOY_ENV&rsquo;){File.file?('/.dockerenv&rsquo;) ? &lsquo;docker&rsquo; : &lsquo;local&rsquo;}
+end</p>
+<p>def logger
+@logger ||= Logger.new(STDOUT)
+end</p>
+<p>def load_environment(config_file)</p>
+<pre><code>unless File.file?(config_file)
+  logger.info 'Using local environment'
+  return
+end
+
+logger.info &quot;Loading environment from `#{config_file}`&quot;
+Dotenv::Parser.new(IO.read(config_file)).call.each_pair do |key, value|
+  ENV[key] = value.to_s
+end
+</code></pre>
+<p>end</p>
+<p>def rails_env
+@rails_env ||= ENV.fetch(&lsquo;RAILS_ENV&rsquo;, &lsquo;development&rsquo;)
+end</p>
+<p>def spawn_(command, env = {})
+@pids &laquo; Process.spawn(env, command)</p>
+<pre><code>command = &quot;#{command} `#{env.to_json}`&quot;
+logger.info &quot;Started[#{@pids.last}] #{command}&quot;
+@pid_commands[@pids.last] = command
+</code></pre>
+<p>end</p>
+<p>def system_(command, env = {})
+logger.info &ldquo;Running #{command}&rdquo;
+system(env, command)
+end</p>
+<p>def start_nginx
+spawn_ &lsquo;nginx&rsquo;
+end</p>
+<p>def start_webpack_dev_server
+spawn_ &lsquo;bin/webpack-dev-server&rsquo;
+end</p>
+<p>def start_rails_s
+system &lsquo;rm -f /app/tmp/pids/server.pid&rsquo;
+spawn_ &lsquo;bin/rails s -b 0.0.0.0 -p 3000&rsquo;
+end</p>
+<p>def start_worker
+spawn_ &ldquo;bundle exec sidekiq -C config/sidekiq.yml -t 60 -c #{ENV.fetch(&ldquo;RAILS_MAX_THREADS&rdquo;, 20)}&rdquo;
+end</p>
+<p>def quit_all
+@quit = true</p>
+<pre><code>@pids.each do |pid|
+  Process.kill 'TERM', pid
+end
+</code></pre>
+<p>end</p>
+<p>def wait_all
+until @pids.empty?
+pid = Process.wait
+logger.info &ldquo;Exited[#{pid}] #{$?.exitstatus} - #{@pid_commands[pid]}&rdquo;
+@pids -= [pid]</p>
+<pre><code>  if !@quit
+    logger.info 'Shutting down container due to component failure'
+    quit_all
+  end
+end
+</code></pre>
+<p>end</p>
+<p>end</p>
+<p>Docker.new.call
+<!-- raw HTML omitted --><!-- raw HTML omitted --><!-- raw HTML omitted -->When you put this all together you can build and run your docker image with the command:<!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/11/05/getting-familiar-with.html">Getting Familiar with RSpec in Rails</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/11/05/getting-familiar-with.html" class="u-url"><time class="dt-published" datetime="2022-11-05 09:19:51 -0800">Nov 5, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#960050;background-color:#1e0010">$</span> rails <span style="color:#66d9ef">new</span> rspec<span style="color:#f92672">-</span>example<span style="color:#f92672">-</span>app <span style="color:#f92672">-</span>T
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby">group <span style="color:#e6db74">:development</span>, <span style="color:#e6db74">:test</span> <span style="color:#66d9ef">do</span>
+  gem <span style="color:#e6db74">&#39;rspec-rails&#39;</span>, <span style="color:#e6db74">&#39;~&gt; 6.0.0&#39;</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ bundle install
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ rails generate rspec:install
+    create  .rspec
+    create  spec
+    create  spec/spec_helper.rb
+    create  spec/rails_helper.rb
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ bin/rails g model User email:string password:string
+  Running via Spring preloader in process <span style="color:#ae81ff">41305</span>
+      invoke  active_record
+      create    db/migrate/20221107061213_create_users.rb
+      create    app/models/user.rb
+      invoke    rspec
+      create      spec/models/user_spec.rb
+
+$ bin/rails db:migrate
+$ rspec
+
+*
+
+Pending: <span style="color:#f92672">(</span>Failures listed here are expected and <span style="color:#66d9ef">do</span> not affect your suite<span style="color:#960050;background-color:#1e0010">&#39;</span>s status<span style="color:#f92672">)</span>
+
+  1<span style="color:#f92672">)</span> User add some examples to <span style="color:#f92672">(</span>or delete<span style="color:#f92672">)</span> /Users/roylindauer/Development/rspec-example-app/spec/models/user_spec.rb
+     <span style="color:#75715e"># Not yet implemented</span>
+     <span style="color:#75715e"># ./spec/models/user_spec.rb:4</span>
+
+
+Finished in 0.00074 seconds <span style="color:#f92672">(</span>files took 0.38603 seconds to load<span style="color:#f92672">)</span>
+<span style="color:#ae81ff">1</span> example, <span style="color:#ae81ff">0</span> failures, <span style="color:#ae81ff">1</span> pending
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">User</span> <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">ApplicationRecord</span>
+  validates <span style="color:#e6db74">:email</span>, <span style="color:#e6db74">presence</span>: <span style="color:#66d9ef">true</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby">require <span style="color:#e6db74">&#39;rails_helper&#39;</span>
+
+<span style="color:#66d9ef">RSpec</span><span style="color:#f92672">.</span>describe <span style="color:#66d9ef">User</span>, <span style="color:#e6db74">type</span>: <span style="color:#e6db74">:model</span> <span style="color:#66d9ef">do</span>
+  context <span style="color:#e6db74">&#34;when email address is missing&#34;</span> <span style="color:#66d9ef">do</span>
+    it <span style="color:#e6db74">&#34;should return a validation error&#34;</span> <span style="color:#66d9ef">do</span>
+      user <span style="color:#f92672">=</span> <span style="color:#66d9ef">User</span><span style="color:#f92672">.</span>new<span style="color:#f92672">.</span>save
+      expect(user)<span style="color:#f92672">.</span>to eq(<span style="color:#66d9ef">false</span>)
+    <span style="color:#66d9ef">end</span>
+  <span style="color:#66d9ef">end</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ rspec
+.
+
+Finished in 0.0165 seconds <span style="color:#f92672">(</span>files took 0.45219 seconds to load<span style="color:#f92672">)</span>
+<span style="color:#ae81ff">1</span> example, <span style="color:#ae81ff">0</span> failures
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">--require spec_helper
+--format documentation
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ rspec
+
+User
+  when email address is missing
+    should <span style="color:#66d9ef">return</span> a validation error
+
+Finished in 0.00796 seconds <span style="color:#f92672">(</span>files took 0.48131 seconds to load<span style="color:#f92672">)</span>
+<span style="color:#ae81ff">1</span> example, <span style="color:#ae81ff">0</span> failures
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ bin/rails g migration AddActiveFieldToUser active:boolean
+$ bin/rails db:migrate
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby"><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">User</span> <span style="color:#f92672">&lt;</span> <span style="color:#66d9ef">ApplicationRecord</span>
+  validates <span style="color:#e6db74">:email</span>, <span style="color:#e6db74">presence</span>: <span style="color:#66d9ef">true</span>
+
+  scope <span style="color:#e6db74">:active_users</span>, <span style="color:#f92672">-&gt;</span> { where(<span style="color:#e6db74">active</span>: <span style="color:#66d9ef">true</span>) }
+<span style="color:#66d9ef">end</span>
+</code></pre></div><div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby">describe <span style="color:#e6db74">&#34;:active_users scope&#34;</span> <span style="color:#66d9ef">do</span>
+  it <span style="color:#e6db74">&#34;returns active users&#34;</span> <span style="color:#66d9ef">do</span>
+    <span style="color:#66d9ef">User</span><span style="color:#f92672">.</span>new(<span style="color:#e6db74">email</span>: <span style="color:#e6db74">&#39;hello@example.org&#39;</span>, <span style="color:#e6db74">active</span>: <span style="color:#66d9ef">true</span>)<span style="color:#f92672">.</span>save!
+    <span style="color:#66d9ef">User</span><span style="color:#f92672">.</span>new(<span style="color:#e6db74">email</span>: <span style="color:#e6db74">&#39;test@example.org&#39;</span>, <span style="color:#e6db74">active</span>: <span style="color:#66d9ef">false</span>)<span style="color:#f92672">.</span>save!
+    expect(<span style="color:#66d9ef">User</span><span style="color:#f92672">.</span>active_users<span style="color:#f92672">.</span>length)<span style="color:#f92672">.</span>to eq(<span style="color:#ae81ff">1</span>)
+  <span style="color:#66d9ef">end</span>
+<span style="color:#66d9ef">end</span>
+</code></pre></div><!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">$ rspec
+
+User
+  when email address is missing
+    should <span style="color:#66d9ef">return</span> a validation error
+  :active_users scope
+    returns active users
+
+Finished in 0.01023 sec
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/09/30/execute-workflows-with.html">Execute Workflows with Path Filtering in CircleCI</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/09/30/execute-workflows-with.html" class="u-url"><time class="dt-published" datetime="2022-09-30 10:30:49 -0800">Sep 30, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ruby" data-lang="ruby">@path_filter_mapping <span style="color:#f92672">||=</span> {
+  <span style="color:#e6db74">&#39;.circleci/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-ops-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> },
+  <span style="color:#e6db74">&#39;bin/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-ops-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> },
+  <span style="color:#e6db74">&#39;build/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-ops-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> },
+  <span style="color:#e6db74">&#39;infrastructure/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-infrastructure-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> },
+  <span style="color:#e6db74">&#39;src/project1/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-project1-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> },
+  <span style="color:#e6db74">&#39;src/project2/.*&#39;</span> <span style="color:#f92672">=&gt;</span> { <span style="color:#e6db74">&#39;run-project2-workflow&#39;</span> <span style="color:#f92672">=&gt;</span> <span style="color:#66d9ef">true</span> }
+}
+</code></pre></div><!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/09/20/the-difference-between.html">The difference between length, size, and count in Ruby on Rails</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/09/20/the-difference-between.html" class="u-url"><time class="dt-published" datetime="2022-09-20 08:55:41 -0800">Sep 20, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/09/13/aws-acm-terraform.html">AWS ACM Terraform Module with Variable SANs</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/09/13/aws-acm-terraform.html" class="u-url"><time class="dt-published" datetime="2022-09-13 20:25:42 -0800">Sep 13, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/09/13/a-terraform-directory.html">A Terraform Directory Structure</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/09/13/a-terraform-directory.html" class="u-url"><time class="dt-published" datetime="2022-09-13 14:00:58 -0800">Sep 13, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/09/05/enforcing-interfaces-in.html">Enforcing Interfaces in Ruby</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/09/05/enforcing-interfaces-in.html" class="u-url"><time class="dt-published" datetime="2022-09-05 11:22:31 -0800">Sep 5, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/08/07/multiplatform-git-diff.html">Multi-Platform Git Diff and Merge Tools</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/08/07/multiplatform-git-diff.html" class="u-url"><time class="dt-published" datetime="2022-08-07 16:00:00 -0800">Aug 7, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2022/02/21/my-personal-monorepo.html">My Personal Monorepo &amp; Pipeline</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2022/02/21/my-personal-monorepo.html" class="u-url"><time class="dt-published" datetime="2022-02-21 16:00:00 -0800">Feb 21, 2022</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>roylart:
+start_by_default: true
+build_by_default: true
+after_build:
+- &ldquo;cmd to run after building&rdquo;
+before_build:
+- &ldquo;cmd to run before building&rdquo;
+build_type: capistrano
+tags:
+- wordpress</p>
+<p>roycom:
+build_type: middleman</p>
+<p>lbr:
+build_type: middleman</p>
+<p>matomo:
+build_type: capistrano</p>
+<p><!-- raw HTML omitted --><!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<pre><code>def deploy
+  BuildSystem.logger.info &quot;Deploying #{@params[:service_name]}&quot;
+  BuildSystem.system! &quot;cd src/#{@params[:service_name]}; #{@build_args.join(' ') if @build_args} bundle exec cap #{BuildSystem.branch} deploy&quot;
+end
+</code></pre>
+<p>end
+end
+<!-- raw HTML omitted --><!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2021/03/10/deploying-a-simple.html">Deploying a Simple Rails App with Ansible</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2021/03/10/deploying-a-simple.html" class="u-url"><time class="dt-published" datetime="2021-03-10 16:00:00 -0800">Mar 10, 2021</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2021/03/06/how-to-run.html">How to Run Rails App Server with Systemd and Ansible</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2021/03/06/how-to-run.html" class="u-url"><time class="dt-published" datetime="2021-03-06 16:00:00 -0800">Mar 6, 2021</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<p>&hellip;snip&hellip;</p>
+<p>vars:
+rails_root: &ldquo;/myapp&rdquo;
+rails_user: &ldquo;webuser&rdquo;</p>
+<p>tasks:
+- name: Setup Rails Web Service
+template:
+dest: /usr/lib/systemd/system/rails-web.service
+src: templates/rails-web.systemd.j2</p>
+<pre><code>- name: Enable Rails Web Service
+  systemd:
+    name: rails-web
+    daemon_reload: yes
+    enabled: yes
+    masked: no
+</code></pre>
+<p><!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>[Service]
+Type=simple
+SyslogIdentifier=rails-web
+User={{ rails_user }}
+PIDFile={{ rails_root }}/tmp/pids/web.pid
+WorkingDirectory={{ rails_root }}
+ExecStart=/bin/bash -l -c &ldquo;{{ rails_root }}/bin/rails s -b 0.0.0.0 -p 3000&rdquo;
+ExecReload=/bin/kill -s USR2 $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID</p>
+<p>[Install]
+WantedBy=multi-user.target
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2021/03/02/simplify-terraform-by.html">Simplify Terraform By Generating Configurations</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2021/03/02/simplify-terraform-by.html" class="u-url"><time class="dt-published" datetime="2021-03-02 16:00:00 -0800">Mar 2, 2021</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<pre><code>out_file = File.open(&quot;#{@output_directory}/main.tf&quot;, 'w')
+out_file.puts(rendered)
+
+format_terraform
+</code></pre>
+<p>end</p>
+<p>def format_terraform
+system &ldquo;terraform fmt #{@output_directory}&rdquo;
+end</p>
+<p>def create_output_directory
+directory = &ldquo;terraform/#{@config[&lsquo;config_src&rsquo;]}&rdquo;</p>
+<pre><code>unless File.directory?(directory)
+  FileUtils.mkdir_p(directory)
+end
+
+directory
+</code></pre>
+<p>end</p>
+<p>def main(*argv)
+config_src = argv.last</p>
+<pre><code>@config           = YAML.load_file(&quot;configs/#{config_src}.yaml&quot;)
+@tf_template      = 'main.tf.erb'
+@output_directory = create_output_directory
+@context          = binding
+
+output_terraform
+</code></pre>
+<p>end</p>
+<p>main(*ARGV)
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>region: us-west-1</p>
+<p>tfstate: develop</p>
+<p>cluster:
+name: DEVELOP</p>
+<p>load_balancers:
+frontend:
+ssl_certs:
+- example.com
+backend:
+ssl_certs:
+- example.com</p>
+<p>ssl_certs:
+default:
+domain_name: &lsquo;example.com&rsquo;
+subject_alternative_names:
+- &lsquo;*.example.com&rsquo;</p>
+<p>services:</p>
+<p>my_service:
+task_count: 2
+cpu: 256
+memory: 512
+https:
+load_balancer: frontend
+url: my_service.example.com
+health_check:
+path: /
+autoscaling:
+min: 2
+max: 8
+cpu: 75</p>
+<p>my_other_service:
+task_count: 2
+cpu: 256
+memory: 512
+https:
+load_balancer: backend
+url: my_other_service.example.com
+health_check:
+path: /
+autoscaling:
+min: 2
+max: 4
+cpu: 60
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+<!-- raw HTML omitted -->
+<p>backend &ldquo;s3&rdquo; {
+bucket = &ldquo;terraform-state&rdquo;
+key    = &ldquo;&lt;%= @config[&lsquo;tfstate&rsquo;] %&gt;/terraform.tfstate&rdquo;
+region = &ldquo;&lt;%= @config[&lsquo;region&rsquo;] %&gt;&rdquo;</p>
+<pre><code># Force encryption
+encrypt = true
+</code></pre>
+<p>}</p>
+<p>required_providers {
+aws = {
+version = &ldquo;~&gt; 3.24.1&rdquo;
+}
+}
+}</p>
+<p>provider &ldquo;aws&rdquo; {
+region = &ldquo;&lt;%= @config[&lsquo;region&rsquo;] %&gt;&rdquo;
+}
+&lt;% @config[&lsquo;services&rsquo;].each do |service, values| %&gt;
+&hellip;
+&lt;% end %&gt;</p>
+<p>&hellip; etc &hellip;
+<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2018/02/13/profiling-and-debugging.html">Profiling and Debugging a PHP app with Xdebug and Docker</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2018/02/13/profiling-and-debugging.html" class="u-url"><time class="dt-published" datetime="2018-02-13 16:00:00 -0800">Feb 13, 2018</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2018/01/28/wp-transients-must.html">WP Transients must be used responsibly</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2018/01/28/wp-transients-must.html" class="u-url"><time class="dt-published" datetime="2018-01-28 16:00:00 -0800">Jan 28, 2018</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2017/07/24/order-posts-via.html">Order Posts via </a></h1>
+		
+
+		<a href="https://roylindauer.dev/2017/07/24/order-posts-via.html" class="u-url"><time class="dt-published" datetime="2017-07-24 16:00:00 -0800">Jul 24, 2017</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/12/19/regular-expression-of.html">Regular Expression of the day</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/12/19/regular-expression-of.html" class="u-url"><time class="dt-published" datetime="2016-12-19 16:00:00 -0800">Dec 19, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/10/04/technical-documentation-for.html">Technical Documentation for a Web Development Project</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/10/04/technical-documentation-for.html" class="u-url"><time class="dt-published" datetime="2016-10-04 16:00:00 -0800">Oct 4, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/09/21/tls-peer-verification.html">TLS Peer Verification w/PHP 5.6 and WordPress SMTP Email plugin</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/09/21/tls-peer-verification.html" class="u-url"><time class="dt-published" datetime="2016-09-21 16:00:00 -0800">Sep 21, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/06/12/whitelist-ips-in.html">Whitelist IPs in Nginx</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/06/12/whitelist-ips-in.html" class="u-url"><time class="dt-published" datetime="2016-06-12 16:00:00 -0800">Jun 12, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/05/16/capistrano-tasks-for.html">Capistrano tasks for Magento</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/05/16/capistrano-tasks-for.html" class="u-url"><time class="dt-published" datetime="2016-05-16 16:00:00 -0800">May 16, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/05/05/creating-link-tags.html">Creating link tags with hreflang attributes in CraftCMS</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/05/05/creating-link-tags.html" class="u-url"><time class="dt-published" datetime="2016-05-05 16:00:00 -0800">May 5, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2016/02/08/setting-up-git.html">Setting up Git HTTP Backend for local collaboration</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2016/02/08/setting-up-git.html" class="u-url"><time class="dt-published" datetime="2016-02-08 16:00:00 -0800">Feb 8, 2016</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>You should be able to make changes and push to your remote.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/06/07/enable-status-for.html">Enable status for php-fpm</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/06/07/enable-status-for.html" class="u-url"><time class="dt-published" datetime="2015-06-07 16:00:00 -0800">Jun 7, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/05/25/my-pantheon-jenkins.html">My Pantheon &#43; Jenkins Process</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/05/25/my-pantheon-jenkins.html" class="u-url"><time class="dt-published" datetime="2015-05-25 16:00:00 -0800">May 25, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/05/20/a-wordpress-ajax.html">A WordPress ajax handler for custom themes</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/05/20/a-wordpress-ajax.html" class="u-url"><time class="dt-published" datetime="2015-05-20 16:00:00 -0800">May 20, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p> </p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/05/18/my-vagrantfile.html">My VagrantFile</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/05/18/my-vagrantfile.html" class="u-url"><time class="dt-published" datetime="2015-05-18 16:00:00 -0800">May 18, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/04/01/ohai-plugin-for.html">Ohai Plugin for OpenVZ VMs to get public IP Address</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/04/01/ohai-plugin-for.html" class="u-url"><time class="dt-published" datetime="2015-04-01 16:00:00 -0800">Apr 1, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>Node Name:   mydv.server.com
+Environment: production
+FQDN:        mydv.server.com
+IP:          10.20.30.40<!-- raw HTML omitted --><!-- raw HTML omitted --></p>
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2015/02/18/what-to-do.html">What to do when your website is hacked/exploited</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2015/02/18/what-to-do.html" class="u-url"><time class="dt-published" datetime="2015-02-18 16:00:00 -0800">Feb 18, 2015</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2014/09/25/virtualbox-bug-related.html">Virtualbox Bug related to SendFile</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2014/09/25/virtualbox-bug-related.html" class="u-url"><time class="dt-published" datetime="2014-09-25 16:00:00 -0800">Sep 25, 2014</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2014/07/12/setup-development-environment.html">Setup Development Environment with Vagrant &amp; Chef</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2014/07/12/setup-development-environment.html" class="u-url"><time class="dt-published" datetime="2014-07-12 16:00:00 -0800">Jul 12, 2014</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2014/07/11/trying-to-troubleshoot.html">Trying to Troubleshoot extremely high MySQL CPU Usage</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2014/07/11/trying-to-troubleshoot.html" class="u-url"><time class="dt-published" datetime="2014-07-11 16:00:00 -0800">Jul 11, 2014</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+	  <div class="h-entry">
+		
+			<h1><a href="https://roylindauer.dev/2014/07/09/securing-git-repository.html">Securing Git repository from accidental exposure using Chef</a></h1>
+		
+
+		<a href="https://roylindauer.dev/2014/07/09/securing-git-repository.html" class="u-url"><time class="dt-published" datetime="2014-07-09 16:00:00 -0800">Jul 9, 2014</time></a>
+
+		<div class="e-content">
+			 <!-- raw HTML omitted -->
+
+		</div>
+	  </div>
+	
+
+</div>
+
+
+    
+    
+
+  </body>
+
+</html>
