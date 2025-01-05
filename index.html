@@ -30,42 +30,38 @@
 		<a href="https://roylindauer.dev/2024/11/12/running-a-docker.html" class="u-url"><time class="dt-published" datetime="2024-11-12 12:17:35 -0800">Nov 12, 2024</time></a>
 
 		<div class="e-content">
-			 <p>What I wanted is to have a docker image registry available in my home network for testing and developing websites and applications. I do not want or need access to the registry outside of my home network.</p>
-<p>Here is what I learned and how I did it.</p>
-<p>Step 0 - Create a VM to be the home for my registry. There are a lot of ways to do this. I use Proxmox on a Dell PowerEdge server, so that is where I will create my VM and install Ubuntu.</p>
-<p>Step 1 - Install Docker</p>
-<p>The Docker website has instructions for installing on various operating systems with different package managers. I am using their instructions for Ubuntu.</p>
-<p>First remove any default installs, add the docker repository, then install. ie:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell"><span style="color:#66d9ef">for</span> pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; <span style="color:#66d9ef">do</span> sudo apt-get remove $pkg; <span style="color:#66d9ef">done</span>
-
-sudo apt-get update
-sudo apt-get install ca-certificates curl
-sudo install -m <span style="color:#ae81ff">0755</span> -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-echo <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  <span style="color:#e6db74">&#34;deb [arch=</span><span style="color:#66d9ef">$(</span>dpkg --print-architecture<span style="color:#66d9ef">)</span><span style="color:#e6db74"> signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-</span><span style="color:#e6db74">  </span><span style="color:#66d9ef">$(</span>. /etc/os-release <span style="color:#f92672">&amp;&amp;</span> echo <span style="color:#e6db74">&#34;</span>$VERSION_CODENAME<span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">)</span><span style="color:#e6db74"> stable&#34;</span> | <span style="color:#ae81ff">\
-</span><span style="color:#ae81ff"></span>  sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
-sudo apt-get update
-
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-</code></pre></div><p>Step 2 - Figure out if you want to secure the registry, or not.</p>
-<p>This is where I have had the most trouble.</p>
-<p>The options as I saw them.</p>
-<p><strong>Do not secure the registry.</strong></p>
-<p>Configure each docker installation that would interact with the registry to use an insecure registry. This works, mostly. What I was running into was that some applications that build docker images that use buildkit would fail to push the image to the registry. This requires customizing buildkit, but I simply could not get this working with Kamal. Going this route requires me to fiddle with may too many knobs. It&rsquo;s more brittle this way</p>
-<p><strong>Secure the registry with a self signed certificate.</strong></p>
-<p>Doable, but annoying. Again, so many knobs and dials to fiddle with. You are now managing the certificates, and distributing to the different machines that need them.</p>
-<p><strong>Secure the registry with certficates from letsencrypt.</strong></p>
+			 <p>Home labs are a great place to learn and tinker with systems. I love it because I get to wear my systems administrator hat. I&rsquo;ve been doing a lot of application development lately as well as tinkering with various build &amp; deployment tools for those applications. The best way, in my opinion, is <a href="https://docs.docker.com/">docker</a>. It&rsquo;s just so good, you can package up all of the tools and configurations into a distributable unit, using an open standard.</p>
+<p>Those packaged units are <a href="https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/">called images in docker</a>. And in order to distribute them, you need a place to store them. Enter the registry.</p>
+<blockquote>
+<p>The Registry is a stateless, highly scalable server side application that stores and lets you distribute container images and other content. Learn more about it here -&gt; <a href="https://distribution.github.io/distribution/">https://distribution.github.io/distribution/</a></p>
+</blockquote>
+<p>When you pull an image from the docker hub, you are pulling from an image registry. You can run this registry yourself, which is exactly what I want to do.</p>
+<p>There are hosted registries you can use such as hub.docker.com, or github packages. There are also paid versions like with AWS ECR, or DigitalOcean.</p>
+<p>I want my own because I don&rsquo;t want hobby apps and experiments on a public registry. I also do not want to pay for private registry when I am perfectly capable of running my own. I do not require authentication since it is my home network.</p>
+<hr>
+<p>I do not want this to be a tutorial on how to setup and run the image registry. There are a lot of good resources for that. Instead I want to chat about 3 different ways to run the registry, and the headaches that come with each.</p>
+<p>For a few months I have been running the registry on my home network and deploying some apps from it, but it has felt fragile. Tweaking and turning far more knobs and dials than I had expected. A lot of effort to run the registry where communication between the docker cli and engine was over TLS.</p>
+<p>There are 3 ways to run the registry. Insecurely, Securely with Self-Signed Certificates, and Securely with &ldquo;proper&rdquo; Certificates.</p>
+<h2 id="insecurely">Insecurely</h2>
+<p>This is easy enough. You run the registry, do not create any certs, and then configure each docker installation in your network to use insecure registries. It also mostly just works. What I was running into was that some applications that build docker images that also use buildkit would fail to push the image to the registry. To get passed that required customizing buildkit configuration, but I simply could not get this working correctly (especially with Kamal). Going this route required me to fiddle with may too many knobs that were not the registry itself.</p>
+<p>If I was running the registry on my workstation and only building on my workstation it would be fine.</p>
+<p>Customizing docker run time settings you create a file <code>/etc/docker/daemon.json</code> if it does not already exist. Then you add the following, then restart docker.</p>
+<pre tabindex="0"><code>{
+    &quot;insecure-registries&quot; : [ &quot;registry.lindauerlab.net:5000&quot; ]
+}
+</code></pre><h2 id="securely-with-a-self-signed-certificate">Securely with a self-signed certificate</h2>
+<p>Doable, but annoying to be real blunt. Again, so many knobs and dials to fiddle with that are not the registry or immediately related to me getting work done. Now I am managing the certificates, <em>and</em> distributing to the different machines that need them. I was having some trouble getting this working entirely. Sometimes <code>docker login</code> would fail due to SSL errors. Most of the time buildkit failed to push an image. I realized quickly that I would have to spend more time janitoring certificates than I wanted to, which is to say more than zero percent.</p>
+<h2 id="securely-with-certificates-from-letsencrypt">Securely with certificates from letsencrypt</h2>
 <p>The option I ultimately ended up going with.</p>
-<p>This path has the least amount of friction. None of my VMs are exposed to the Internet so I went with DNS validation for generating the certs. I did loosen up the permissions for the cert directories so I could mount them in the registry container with less hassle. I probably could run an NGinx proxy on the server and route requests to the registry container and avoid the permissions issue. The trade off I guess is finding which knobs and dials you care to tweak.</p>
-<p>I am containing this in a project directory called <code>docker-registry</code></p>
-<p>It consists of a docker-compose.yml, a symlink to the letsencrypt certs, and a directory to store the data.</p>
-<p>After I generated certs, symlinked the certs directory in my registry project.</p>
+<p>This path has the least amount of friction. None of my VMs are publicly accessible frm the Internet so I went with DNS validation for generating the certs. I did loosen up the permissions for the cert directories so I could mount them in the registry container with less hassle. I probably could run an NGinx proxy on the server and route requests to the registry container and avoid the permissions issue. The trade off I guess is finding which knobs and dials you care to tweak.</p>
+<p>This has far less dials. Far less fiddling. Certbot makes it super easy to get certs. <strong>Most of the fiddling work is done on a single machine now</strong>, instead of across many machines. Overall, just less work. And something I can more easily encapsulate into an ansible playbook.</p>
+<h2 id="my-working-registry-project">My working registry project</h2>
+<p>I am containing this in a project called <code>~/docker-registry</code></p>
+<p>It consists of a <code>docker-compose.yml</code>, a symlink to the letsencrypt certs, and a directory to store the data.</p>
+<p><strong>Generate certificates:</strong></p>
 <pre tabindex="0"><code>sudo certbot certonly --manual --preferred-challenges dns-01 -d registry.lindauerlab.net 
-</code></pre><pre tabindex="0"><code>sudo ln -s /etc/letsencrypt/live/registry.lindauerlab.net certs
+</code></pre><p><strong>Symlink certs directory:</strong></p>
+<pre tabindex="0"><code>sudo ln -s /etc/letsencrypt/live/registry.lindauerlab.net certs
 </code></pre><p><strong>docker-compose.yml</strong></p>
 <pre tabindex="0"><code>services:
   registry:
@@ -76,13 +72,15 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin 
       REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /data
       REGISTRY_HTTP_TLS_CERTIFICATE: /certs/fullchain1.pem
       REGISTRY_HTTP_TLS_KEY: /certs/privkey1.pem
-      # REGISTRY_AUTH_HTPASSWD_REALM: Registry Realm
-      # REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
-      # REGISTRY_AUTH: htpasswd
     volumes:
       - ./data:/data
-      - ./auth:/auth
       - ./certs/:/certs
+</code></pre><p>It&rsquo;s important that you use the fullchain for the TLS cert or you will get certificate authority errors.</p>
+<p>Now it&rsquo;s as simple as <code>docker compose up -d</code> and I have a working registry.</p>
+<p>Test with curl -</p>
+<pre tabindex="0"><code>curl https://registry.lindauerlab.net:5000/v2/_catalog
+
+{&quot;repositories&quot;:[&quot;some-test-project-i-already-pushed-up&quot;]}
 </code></pre>
 		</div>
 	  </div>
